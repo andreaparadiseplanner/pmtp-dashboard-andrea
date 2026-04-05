@@ -570,10 +570,22 @@ function CommissionView({session,sb,showToast}){
     if(g>0&&p>0)return(g*(p/100)).toFixed(2);
     return'';
   }
+  /* ── Agency mirror (silent background write) ── */
+  const AGENCY_URL='https://voowpwzpilymtaeskmom.supabase.co';
+  const AGENCY_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvb3dwd3pwaWx5bXRhZXNrbW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzOTU3NjgsImV4cCI6MjA5MDk3MTc2OH0.6q67zuDJAWpaRHlFWbLFYFRCK_LcNrU6_2bWYetE76Y';
+  const AGENT_NAME='Andrea Gunter';
+  async function mirrorPayment(data){
+    try{await fetch(AGENCY_URL+'/rest/v1/agency_payments',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,paid_date:data.paid_date||null,year:data.year||new Date().getFullYear(),amount:parseFloat(data.amount)||0,notes:data.notes||null}])});}catch(e){}
+  }
+  async function mirrorPending(data,status='pending'){
+    try{await fetch(AGENCY_URL+'/rest/v1/agency_pending',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,gross:parseFloat(data.gross)||null,supplier_pct:parseFloat(data.supplier_pct)||null,agent_split_pct:parseFloat(data.agent_split_pct)||null,expected_amount:parseFloat(data.expected_amount||data.amount)||0,expected_date:data.expected_date||null,year:data.year||new Date().getFullYear(),status,notes:data.notes||null}])});}catch(e){}
+  }
+
   async function savePay(){
     if(!payForm.amount){showToast('Enter a commission amount','err');return;}
     const{error}=await sb.from('manual_payments').insert({...payForm,user_id:uid2,amount:parseFloat(payForm.amount),year:parseInt(payForm.year)});
     if(error){showToast('Could not save payment','err');return;}
+    mirrorPayment({...payForm,amount:parseFloat(payForm.amount),year:parseInt(payForm.year)});
     showToast('Payment saved!');setShowAddPay(false);
     setPayForm({client:'',supplier:'',ref:'',paid_date:'',year:new Date().getFullYear(),amount:'',notes:''});loadData();
   }
@@ -583,12 +595,14 @@ function CommissionView({session,sb,showToast}){
     if(!amt){showToast('Enter or calculate an expected amount','err');return;}
     const{error}=await sb.from('pending_commissions').insert({...pendForm,user_id:uid2,gross:parseFloat(pendForm.gross)||null,supplier_pct:parseFloat(pendForm.supplier_pct)||null,agent_split_pct:parseFloat(pendForm.agent_split_pct)||null,expected_amount:parseFloat(amt),year:parseInt(pendForm.year),status:'pending'});
     if(error){showToast('Could not save','err');return;}
+    mirrorPending({...pendForm,expected_amount:parseFloat(amt),year:parseInt(pendForm.year)});
     showToast('Added to pending!');setShowAddPend(false);
     setPendForm({client:'',supplier:'',ref:'',gross:'',supplier_pct:'',agent_split_pct:'',expected_amount:'',expected_date:'',year:new Date().getFullYear(),notes:''});loadData();
   }
   async function markReceived(p){
     await sb.from('pending_commissions').update({status:'received'}).eq('id',p.id).eq('user_id',uid2);
     await sb.from('manual_payments').insert({user_id:uid2,client:p.client,supplier:p.supplier,ref:p.ref,paid_date:new Date().toLocaleDateString(),year:p.year,amount:p.expected_amount,notes:(p.notes||'')+' — moved from pending'});
+    mirrorPayment({client:p.client,supplier:p.supplier,ref:p.ref,paid_date:new Date().toLocaleDateString(),year:p.year,amount:p.expected_amount,notes:(p.notes||'')+' — moved from pending'});
     showToast('Commission marked received!');loadData();
   }
   async function delPend(id){await sb.from('pending_commissions').delete().eq('id',id).eq('user_id',uid2);loadData();}
