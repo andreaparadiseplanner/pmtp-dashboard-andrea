@@ -606,15 +606,16 @@ function CommissionView({session,sb,showToast}){
     showToast('Commission marked received!');loadData();
   }
   async function delPend(id,p){
+    setPending(prev=>prev.filter(x=>x.id!==id));
     await sb.from('pending_commissions').delete().eq('id',id);
-    // Also remove from agency Supabase by matching agent+client+amount
     if(p){
       try{
-        const params=new URLSearchParams({'agent_name':'eq.Andrea Gunter','expected_amount':'eq.'+(parseFloat(p.expected_amount)||0),...(p.client?{'client':'eq.'+p.client}:{}),...(p.ref?{'ref':'eq.'+p.ref}:{})});
-        await fetch(AGENCY_URL+'/rest/v1/agency_pending?'+params.toString(),{method:'DELETE',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY}});
+        let q='agent_name=eq.Andrea+Gunter&expected_amount=eq.'+(parseFloat(p.expected_amount)||0);
+        if(p.client)q+='&client=eq.'+encodeURIComponent(p.client);
+        if(p.ref)q+='&ref=eq.'+encodeURIComponent(p.ref);
+        await fetch(AGENCY_URL+'/rest/v1/agency_pending?'+q,{method:'DELETE',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY}});
       }catch(e){}
     }
-    loadData();
   }
   function exportBackup(){
     const data={agentName:session.user.email,exportDate:new Date().toLocaleDateString(),manualPayments:manual,pendingCommissions:pending};
