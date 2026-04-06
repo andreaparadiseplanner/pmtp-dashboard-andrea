@@ -912,6 +912,7 @@ function VaultView({session,sb,showToast}){
 function QuickAccessBar(){
   const[open,setOpen]=React.useState(true);
   const LINKS=[
+    {icon:'🤝',label:'Co-Work Agreement',url:'https://drive.google.com/file/d/1D_3tBDe-oHSQYhq-kd6lk9lY2smHZmsI/copy'},
     {icon:'🚀',label:'Launchboard',url:'https://pmtp-launchboard.vercel.app/'},
     {icon:'📋',label:'FIT Trip',url:'https://docs.google.com/spreadsheets/d/11iTKoAtr6EEo9yqMYUSeTNFCEKkRsTfb/copy'},
     {icon:'⚡',label:'Gamma',url:'https://gamma.app/'},
@@ -977,16 +978,11 @@ function CommissionView({session,sb,showToast}){
     if(g>0&&p>0)return(g*(p/100)).toFixed(2);
     return'';
   }
-  /* ── Agency mirror ── */
   const AGENCY_URL='https://voowpwzpilymtaeskmom.supabase.co';
   const AGENCY_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvb3dwd3pwaWx5bXRhZXNrbW9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzOTU3NjgsImV4cCI6MjA5MDk3MTc2OH0.6q67zuDJAWpaRHlFWbLFYFRCK_LcNrU6_2bWYetE76Y';
   const AGENT_NAME='Andrea Gunter';
-  async function mirrorPayment(data){
-    try{await fetch(AGENCY_URL+'/rest/v1/agency_payments',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,paid_date:data.paid_date||null,year:data.year||new Date().getFullYear(),amount:parseFloat(data.amount)||0,notes:data.notes||null}])});}catch(e){}
-  }
-  async function mirrorPending(data,status='pending'){
-    try{await fetch(AGENCY_URL+'/rest/v1/agency_pending',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,gross:parseFloat(data.gross)||null,supplier_pct:parseFloat(data.supplier_pct)||null,agent_split_pct:parseFloat(data.agent_split_pct)||null,expected_amount:parseFloat(data.expected_amount||data.amount)||0,expected_date:data.expected_date||null,year:data.year||new Date().getFullYear(),status,notes:data.notes||null}])});}catch(e){}
-  }
+  async function mirrorPayment(data){try{await fetch(AGENCY_URL+'/rest/v1/agency_payments',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,paid_date:data.paid_date||null,year:data.year||new Date().getFullYear(),amount:parseFloat(data.amount)||0,notes:data.notes||null}])});}catch(e){}}
+  async function mirrorPending(data,status='pending'){try{await fetch(AGENCY_URL+'/rest/v1/agency_pending',{method:'POST',headers:{'Content-Type':'application/json','apikey':AGENCY_KEY,'Authorization':'Bearer '+AGENCY_KEY,'Prefer':'return=minimal'},body:JSON.stringify([{agent_name:AGENT_NAME,client:data.client||null,supplier:data.supplier||null,ref:data.ref||null,gross:parseFloat(data.gross)||null,supplier_pct:parseFloat(data.supplier_pct)||null,agent_split_pct:parseFloat(data.agent_split_pct)||null,expected_amount:parseFloat(data.expected_amount||data.amount)||0,expected_date:data.expected_date||null,year:data.year||new Date().getFullYear(),status,notes:data.notes||null}])});}catch(e){}}
 
     async function savePay(){
     if(!payForm.amount){showToast('Enter a commission amount','err');return;}
@@ -1009,7 +1005,7 @@ function CommissionView({session,sb,showToast}){
   async function markReceived(p){
     await sb.from('pending_commissions').update({status:'received'}).eq('id',p.id).eq('user_id',uid2);
     await sb.from('manual_payments').insert({user_id:uid2,client:p.client,supplier:p.supplier,ref:p.ref,paid_date:new Date().toLocaleDateString(),year:p.year,amount:p.expected_amount,notes:(p.notes||'')+' — moved from pending'});
-    mirrorPayment({client:p.client,supplier:p.supplier,ref:p.ref,paid_date:new Date().toLocaleDateString(),year:p.year,amount:p.expected_amount,notes:(p.notes||'')+' — moved from pending'});
+    mirrorPayment({client:p.client,supplier:p.supplier,ref:p.ref,paid_date:new Date().toLocaleDateString(),year:p.year,amount:p.expected_amount});
     showToast('Commission marked received!');loadData();
   }
   async function delPend(id,p){
@@ -1311,8 +1307,23 @@ function App(){
   const[calLoad,setCalLoad]=useState(null);
   const showToast=useCallback((msg,type='ok')=>setToast({msg,type}),[]);
   const[chatNotif,setChatNotif]=React.useState(null);
+  const[chatUnreadCount,setChatUnreadCount]=React.useState(0);
   const lastChatCheck=React.useRef(new Date().toISOString());
   const agentNameForChat=(session?.user?.user_metadata?.full_name||session?.user?.email||'');
+  React.useEffect(()=>{
+    if(!session||!agentNameForChat)return;
+    // On load: count existing unread messages
+    (async()=>{
+      try{
+        const r=await fetch(CHAT_SB_URL+'/rest/v1/team_chat?select=id,channel,recipient_name,read_by,sender_name&or=(channel.eq.general,and(channel.eq.dm,recipient_name.eq.'+encodeURIComponent(agentNameForChat)+'))&sender_name=neq.'+encodeURIComponent(agentNameForChat),{headers:{'apikey':CHAT_SB_KEY,'Authorization':'Bearer '+CHAT_SB_KEY}});
+        const msgs=await r.json();
+        if(msgs&&msgs.length){
+          const unread=msgs.filter(m=>!m.read_by||!m.read_by.includes(agentNameForChat));
+          if(unread.length>0)setChatUnreadCount(unread.length);
+        }
+      }catch(e){}
+    })();
+  },[session,agentNameForChat]);
   React.useEffect(()=>{
     if(!session)return;
     const poll=setInterval(async()=>{
@@ -1326,6 +1337,7 @@ function App(){
             const m=relevant[relevant.length-1];
             setChatNotif({sender:m.sender_name,text:m.message.slice(0,60)+(m.message.length>60?'...':''),isDm:m.channel==='dm'});
             setTimeout(()=>setChatNotif(null),5000);
+            if(view!=='chat')setChatUnreadCount(c=>c+relevant.length);
           }
         }
       }catch(e){}
@@ -1418,7 +1430,7 @@ function App(){
   if(!loaded)return<div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:T.cream}}><div style={{textAlign:'center',color:T.textSec,fontSize:13,letterSpacing:'0.1em'}}>Loading…</div></div>;
   if(!session)return<AuthScreen onAuth={s=>setSession(s)}/>;
   return(
-    <div style={{height:'100vh',background:T.cream,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+    <div style={{height:'100vh',background:T.cream,display:'flex',flexDirection:'column',overflow:'hidden',zoom:zoom}}>
       <div style={{height:72,flexShrink:0,background:'linear-gradient(135deg,'+T.navy+' 0%,'+T.navyMid+' 60%,'+T.navyLight+' 100%)',borderBottom:'2px solid '+T.tealDeep,boxShadow:'0 4px 24px rgba(27,45,58,0.35)',display:'flex',alignItems:'center',padding:'0 24px',position:'relative',zIndex:20}}>
         <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,transparent,'+T.tealDeep+','+T.teal+','+T.tealDeep+',transparent)'}}/>
         <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'none',border:'none',cursor:'pointer',padding:'8px',marginRight:8,display:'flex',flexDirection:'column',gap:4,flexShrink:0}}>
@@ -1457,13 +1469,14 @@ function App(){
               <span style={{fontSize:11,letterSpacing:'0.06em',color:isA?T.goldLight:T.textSub,textTransform:'uppercase',fontWeight:700,textAlign:'left',lineHeight:1.45,fontFamily:"'Georgia',serif",whiteSpace:'normal',wordBreak:'break-word'}}>{m.icon}  {m.nav||m.label}</span>
               <div style={{display:'flex',gap:4,alignItems:'center'}}>
                 {urg>0&&<span style={{background:T.red,color:T.white,fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:8}}>!</span>}
-                {cnt>0&&<span style={{background:'rgba(255,255,255,0.1)',color:T.textSub,fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:10,minWidth:20,textAlign:'center'}}>{cnt}</span>}
+                {m.id==='chat'&&chatUnreadCount>0&&<span style={{background:'#2e8b8b',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:10,minWidth:18,textAlign:'center'}}>{chatUnreadCount}</span>}
+                {m.id!=='chat'&&cnt>0&&<span style={{background:'rgba(255,255,255,0.1)',color:T.textSub,fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:10,minWidth:20,textAlign:'center'}}>{cnt}</span>}
               </div>
             </button>;
           })}
         </div>
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}><QuickAccessBar/><div className='pmtp-content' style={{flex:1,overflowY:'auto'}}>
-          {view==='chat'?<ChatView session={session} showToast={showToast}/>:view==='vault'?<VaultView session={session} sb={sb} showToast={showToast}/>:view==='commissions'?<CommissionView session={session} sb={sb} showToast={showToast}/>:view==='calendar'?<CalendarView active={active} MODS={MODS} highlightId={highlightId} setHighlightId={setHighlightId} isOD={isOD} isUG={isUG} daysTo={daysTo} fmtDate={fmtDate} getDK={getDK} setView={setView} T={T} btn={btn}/>:view==='checklists'?<ChecklistView session={session} showToast={showToast}/>:view==='home'?(
+          {view==='chat'?(()=>{if(chatUnreadCount>0)setChatUnreadCount(0);return<ChatView session={session} showToast={showToast}/>;})():view==='vault'?<VaultView session={session} sb={sb} showToast={showToast}/>:view==='commissions'?<CommissionView session={session} sb={sb} showToast={showToast}/>:view==='calendar'?<CalendarView active={active} MODS={MODS} highlightId={highlightId} setHighlightId={setHighlightId} isOD={isOD} isUG={isUG} daysTo={daysTo} fmtDate={fmtDate} getDK={getDK} setView={setView} T={T} btn={btn}/>:view==='checklists'?<ChecklistView session={session} showToast={showToast}/>:view==='home'?(
             <div style={{padding:'26px 30px',overflowY:'auto',height:'100%'}}>
               <div style={{marginBottom:24}}>
                 <div style={{fontSize:10,letterSpacing:'0.18em',color:T.textSub,textTransform:'uppercase',marginBottom:4}}>{today}</div>
@@ -1603,4 +1616,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(
 </script>
 </body>
 </html>
-
