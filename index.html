@@ -347,6 +347,7 @@ function ItemCard({item,mid,highlightId,onEdit,onToggle,onDelete,onCal,onMove,go
                 <button onClick={()=>onMove(mid,'softFollowups',item)} style={{...btn,padding:'4px 9px',fontSize:10,background:'rgba(117,175,177,0.15)',border:'1px solid '+T.teal,color:T.teal}}>→ Soft</button>
                 <button onClick={()=>onMove(mid,'hpTrips',item)} style={{...btn,padding:'4px 9px',fontSize:10,background:'rgba(192,57,43,0.15)',border:'1px solid '+T.red,color:T.red}}>→ HP Trip</button>
               </>}
+              {mid==='hpTrips'&&<button onClick={()=>onMove(mid,'hpFollowups',item)} style={{...btn,padding:'4px 9px',fontSize:10,background:'rgba(212,132,62,0.15)',border:'1px solid '+T.orange,color:T.orange}}>→ Time Sensitive</button>}
               {mid==='components'&&<button onClick={()=>onMove(mid,'hpTrips',item)} style={{...btn,padding:'4px 9px',fontSize:10,background:'rgba(192,57,43,0.15)',border:'1px solid '+T.red,color:T.red}}>→ HP Trip</button>}
             </div>
           </div>
@@ -1449,6 +1450,12 @@ function App(){
     setData(p=>({...p,[mid]:item?p[mid].map(i=>i.id===id?entry:i):[...p[mid],entry]}));
     setModal(null);setForm({});showToast(item?'Entry updated.':'Entry added.');
   }
+  async function moveToModule(fromMid,toMid,item){
+    const{error}=await sb.from('dashboard_items').update({module_id:toMid}).eq('id',item.id);
+    if(error){showToast('Could not move item','err');return;}
+    setData(p=>({...p,[fromMid]:(p[fromMid]||[]).filter(x=>x.id!==item.id),[toMid]:[...(p[toMid]||[]),{...item,module_id:toMid}]}));
+    showToast('Moved to Time Sensitive Follow-Ups!');
+  }
   async function toggleDone(mid,id,current){
     const{error}=await sb.from('dashboard_items').update({done:!current}).eq('id',id);
     if(error){showToast('Update failed.','err');return;}
@@ -1659,7 +1666,7 @@ function App(){
                     <ItemCard key={item.id} item={item} mid={mod.id} highlightId={highlightId}
                       onEdit={()=>{setModal({mid:mod.id,item});setForm({...item});setFormErr(false);}}
                       onToggle={()=>toggleDone(mod.id,item.id,item.done)}
-                      onDelete={()=>setConfirm({msg:'Remove "'+item[mod.fields[0].k]+'"?',onConfirm:()=>deleteItem(mod.id,item.id)})}
+                      onMove={mod.id==='hpTrips'?()=>moveToModule('hpTrips','hpFollowups',item):null} onDelete={()=>setConfirm({msg:'Remove "'+item[mod.fields[0].k]+'"?',onConfirm:()=>deleteItem(mod.id,item.id)})}
                       onCal={handleCal} onMove={moveItem} googleTok={googleTok} calLoading={calLoad}/>
                   ))}
                 </div>
