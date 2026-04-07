@@ -738,10 +738,10 @@ function VaultView({session,sb,showToast}){
 
   async function del(id){
     if(!window.confirm('Delete this vault entry? This cannot be undone.'))return;
-    const tok2=(JSON.parse(localStorage.getItem('pmtp_s')||'null')||{}).access_token||window.PMTP.SUPABASE_KEY;
-    await fetch(window.PMTP.SUPABASE_URL+'/rest/v1/password_vault?id=eq.'+id+'&user_id=eq.'+uid,{method:'DELETE',headers:{'apikey':window.PMTP.SUPABASE_KEY,'Authorization':'Bearer '+tok2}});
     setEntries(p=>p.filter(e=>e.id!==id));
     showToast('Entry removed.');
+    const tok2=(JSON.parse(localStorage.getItem('pmtp_s')||'null')||{}).access_token||window.PMTP.SUPABASE_KEY;
+    await fetch(window.PMTP.SUPABASE_URL+'/rest/v1/password_vault?id=eq.'+id+'&user_id=eq.'+uid,{method:'DELETE',headers:{'apikey':window.PMTP.SUPABASE_KEY,'Authorization':'Bearer '+tok2}});
   }
 
   function edit(e){
